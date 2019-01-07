@@ -19,11 +19,28 @@ PASSWORD = ''
 GITHUB_REPO = ''
 EMAIL_PWD = ''
 fromaddr = ''
-recipients = []
+recipients = ['']
 SUBJECT = ''
 COLUMN_FIND_CRITERIA = ['Date', 'To Do', 'In Progress',
                         'Verify', 'Done']
-SEND_EMAIL = False
+SEND_EMAIL = True
+
+
+# this returns:
+# (a) the overall issue completion rate
+# (b) the number of remaining issues under To Do
+# (c) the estimated completion date for the remaining issues
+def todo_completion_forecast(arr_stack):
+    num_days = len(arr_stack[0])
+    completion_rate = round(arr_stack[0][num_days-1]/num_days, 3)
+    current_todo_count = arr_stack[3][num_days-1]
+    current_date = datetime.datetime.now()
+    project_completion_days = \
+            (num_days/arr_stack[0][num_days-1])*current_todo_count
+    projected_completion_date = (current_date + \
+            datetime.timedelta(days=project_completion_days)).strftime("%Y-%m-%d")
+    return completion_rate, current_todo_count, projected_completion_date
+
 
 g = Github(USERNAME, PASSWORD)
 repo = g.get_repo(GITHUB_REPO)
@@ -136,6 +153,8 @@ if __name__ == '__main__':
     plot_file_name = 'plot_' + str(current_date) + '.png'
     plot_file = pyplot.savefig(plot_file_name)
     pyplot.show()
+    completion_rate, todo_count, completion_date = \
+            todo_completion_forecast(arr_group)
 
     if SEND_EMAIL:
         current_date = datetime.datetime.now().strftime("%Y-%m-%d")
@@ -144,8 +163,20 @@ if __name__ == '__main__':
         msg['To'] = ", ".join(recipients)
         msg['Subject'] = SUBJECT + str(current_date)
 
-        body = "Please find attached the Kanban Cumulative Flow Diagram for: " + str(current_date)
+        body = "Please find attached the Kanban Cumulative Flow Diagram for: " + \
+                str(current_date)
+        body_new_line = ""
+        body_completion_rate = "Overall issues completion rate = " + \
+                str(completion_rate)
+        body_todo_count = "Planned items in To Do = " + str(todo_count)
+        body_completion_date = "Expected planned items completion by: " + \
+                str(completion_date)
         msg.attach(MIMEText(body, 'plain'))
+        msg.attach(MIMEText(body_new_line, 'plain'))
+        msg.attach(MIMEText(body_completion_rate, 'plain'))
+        msg.attach(MIMEText(body_todo_count, 'plain'))
+        msg.attach(MIMEText(body_completion_date, 'plain'))
+        msg.attach(MIMEText(body_new_line, 'plain'))
 
         filename = 'plot_' + datetime.datetime.now().strftime("%Y-%m-%d") + '.png'
         attachment = open(filename, "rb")
