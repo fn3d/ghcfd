@@ -165,18 +165,20 @@ if __name__ == '__main__':
 
         body = "Please find attached the Kanban Cumulative Flow Diagram for: " + \
                 str(current_date)
-        body_new_line = ""
+        body_new_line = "<br><br>"
         body_completion_rate = "Overall issues completion rate = " + \
                 str(completion_rate)
         body_todo_count = "Planned items in To Do = " + str(todo_count)
         body_completion_date = "Expected planned items completion by: " + \
                 str(completion_date)
-        msg.attach(MIMEText(body, 'plain'))
-        msg.attach(MIMEText(body_new_line, 'plain'))
-        msg.attach(MIMEText(body_completion_rate, 'plain'))
-        msg.attach(MIMEText(body_todo_count, 'plain'))
-        msg.attach(MIMEText(body_completion_date, 'plain'))
-        msg.attach(MIMEText(body_new_line, 'plain'))
+        msg.attach(MIMEText(body, 'html'))
+        msg.attach(MIMEText(body_new_line, 'html'))
+        msg.attach(MIMEText(body_completion_rate, 'html'))
+        msg.attach(MIMEText(body_new_line, 'html'))
+        msg.attach(MIMEText(body_todo_count, 'html'))
+        msg.attach(MIMEText(body_new_line, 'html'))
+        msg.attach(MIMEText(body_completion_date, 'html'))
+        msg.attach(MIMEText(body_new_line, 'html'))
 
         filename = 'plot_' + datetime.datetime.now().strftime("%Y-%m-%d") + '.png'
         attachment = open(filename, "rb")
