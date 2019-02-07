@@ -19,10 +19,11 @@ PASSWORD = ''
 GITHUB_REPO = ''
 EMAIL_PWD = ''
 fromaddr = ''
-recipients = ['']
+recipients = ['justemail@test.com','anotheremail@test.com']
 SUBJECT = ''
 COLUMN_FIND_CRITERIA = ['Date', 'To Do', 'In Progress',
                         'Verify', 'Done']
+LABEL_FILTER = ['Sample']
 SEND_EMAIL = True
 
 
@@ -43,7 +44,7 @@ def todo_completion_forecast(arr_stack):
 
 
 # get the current situation on the board and store it in the dict
-def pull_board_info():
+def pull_board_info(filter_by_label=None):
     board_card_dict = {}
     board_card_dict['Date'] = []
     current_card_dict = {}
@@ -55,24 +56,38 @@ def pull_board_info():
                 for criteria in COLUMN_FIND_CRITERIA:
                     if criteria.lower() in column.name.lower():
                         board_card_dict[criteria] = [column.name]
-                        cards_count = len(list(column.get_cards()))
+                        column_cards = column.get_cards()
+                        cards_count = 0
+                        if filter_by_label:
+                            for card in column_cards:
+                                split_url = (card.content_url).split('/')
+                                issue_num = split_url[len(split_url)-1]
+                                issue_url = "https://github.com/" + GITHUB_REPO + "/" + \
+                                    str(issue_num)
+                                issue = repo.get_issue(int(issue_num))
+                                issue_labels = list(issue.get_labels())
+                                for label in issue_labels:
+                                    if filter_by_label.lower() == label.name.lower():
+                                        cards_count += 1
+                        else:
+                            cards_count = len(list(column.get_cards()))
                         current_card_dict[criteria] = cards_count
             break
     return board_card_dict, current_card_dict
 
 
 # writing today's board status to the csv file
-def write_board_to_csv(current_date, last_row, current_card_dict):
-    csv_file_write = open(CSV_FILE_NAME, "a", newline='')
+def write_board_to_csv(current_date, last_row, current_card_dict, csv_file):
+    csv_file_write = open(csv_file, "a", newline='')
     csv_writer = csv.writer(csv_file_write, delimiter=',')
 
     if current_date == last_row[0]:
         temp_arr = []
-        csv_file_read = open(CSV_FILE_NAME, 'r', newline='')
+        csv_file_read = open(csv_file, 'r', newline='')
         csv_reader = csv.reader(csv_file_read, delimiter=',')
         for row in csv_reader:
             temp_arr.append(row)
-        csv_file_write = open(CSV_FILE_NAME, 'w')
+        csv_file_write = open(csv_file, 'w')
         csv_writer = csv.writer(csv_file_write, delimiter=',')
         for i in range(0, len(temp_arr)-1):
             csv_writer.writerow(temp_arr[i])
@@ -85,13 +100,14 @@ def write_board_to_csv(current_date, last_row, current_card_dict):
     csv_file_write.close()
 
 
-def pull_updated_csv_info(current_date, last_row, board_card_dict):
+def pull_updated_csv_info(current_date, last_row, board_card_dict,
+                          current_card_dict, csv_file):
     # read the current state on the csv file and store it in the dict
     dates_processed = False
     for i in range(1, len(COLUMN_FIND_CRITERIA)):
         board_card_dict[COLUMN_FIND_CRITERIA[i]].append(0)
         row_count = 0
-        csv_file_read = open(CSV_FILE_NAME, 'r', newline='')
+        csv_file_read = open(csv_file, 'r', newline='')
         csv_reader = csv.reader(csv_file_read, delimiter=',')
         for row in csv_reader:
             if dates_processed is False:
@@ -111,7 +127,7 @@ def pull_updated_csv_info(current_date, last_row, board_card_dict):
 
 # use the information to plot the cumulative flow diagram 
 # by developing numpy arrays from the board_card_dict
-def create_cfd(board_historic_dict):
+def create_cfd(board_historic_dict, current_date, label=None):
     arr_group = []
     for i in reversed(COLUMN_FIND_CRITERIA):
         if (i != 'Date'):
@@ -130,12 +146,15 @@ def create_cfd(board_historic_dict):
     ax.legend([COLUMN_FIND_CRITERIA[i] for i in
                range(len(COLUMN_FIND_CRITERIA)-1, 0, -1)])
     plot_file_name = 'plot_' + str(current_date) + '.png'
+    if label:
+        plot_file_name = str(label) + "_" + plot_file_name
     plot_file = pyplot.savefig(plot_file_name)
-    pyplot.show()
+    #pyplot.show()
     return arr_group
 
 
-def push_email_update(current_date):
+def push_email_update(current_date, completion_rate, todo_count, \
+                     completion_date):
     msg = MIMEMultipart()
     msg['From'] = fromaddr
     msg['To'] = ", ".join(recipients)
@@ -160,13 +179,22 @@ def push_email_update(current_date):
 
     filename = 'plot_' + datetime.datetime.now().strftime("%Y-%m-%d") + '.png'
     attachment = open(filename, "rb")
-
     part = MIMEBase('application', 'octet-stream')
     part.set_payload((attachment).read())
     encoders.encode_base64(part)
     part.add_header('Content-Disposition', "attachment; filename= %s" % filename)
-
     msg.attach(part)
+
+    if len(LABEL_FILTER) > 0:
+        for label in LABEL_FILTER:
+            filename = str(label) + "_" + 'plot_' + \
+                    datetime.datetime.now().strftime("%Y-%m-%d") + '.png'
+            attachment = open(filename, "rb")
+            part = MIMEBase('application', 'octet-stream')
+            part.set_payload((attachment).read())
+            encoders.encode_base64(part)
+            part.add_header('Content-Disposition', "attachment; filename= %s" % filename)
+            msg.attach(part)
 
     server = smtplib.SMTP('smtp.gmail.com', 587)
     server.starttls()
@@ -178,6 +206,44 @@ def push_email_update(current_date):
     server.quit()
 
 
+def process_cfd(label=None):
+
+    board_template_dict, current_card_dict = pull_board_info(label)
+    temp_csv_file_name = CSV_FILE_NAME
+    if label:
+        temp_csv_file_name = str(label) + "_" + CSV_FILE_NAME
+
+    try:
+        csv_file_read = open(temp_csv_file_name, 'r', newline='')
+    except FileNotFoundError:
+        new_csv_file = open(temp_csv_file_name, 'a', newline='')
+        csv_writer = csv.writer(new_csv_file, delimiter=',')
+        header_arr = ['Date', 'To Do', 'In Progress', 'Verify', 'Done']
+        csv_writer.writerow(header_arr)
+        new_csv_file.close()
+
+    csv_file_read = open(temp_csv_file_name, 'r', newline='')
+    csv_reader = csv.reader(csv_file_read, delimiter=',')
+    last_row = None
+    for row in csv_reader:
+        last_row = row
+
+    current_date = datetime.datetime.now().strftime("%Y-%m-%d")
+
+    write_board_to_csv(current_date, last_row, current_card_dict, \
+                       temp_csv_file_name)
+    last_row = [current_card_dict[item] for item in current_card_dict]
+    last_row.insert(0, current_date)
+    board_historic_dict = pull_updated_csv_info(current_date, last_row, \
+                                                board_template_dict, \
+                                                current_card_dict, \
+                                                temp_csv_file_name)
+    arr_group = create_cfd(board_historic_dict, current_date, label)
+    completion_rate, todo_count, completion_date = \
+            todo_completion_forecast(arr_group)
+    return completion_rate, todo_count, completion_date
+
+
 if __name__ == '__main__':
     if (datetime.datetime.now().weekday() != 5) and \
         (datetime.datetime.now().weekday() != 6):
@@ -185,25 +251,16 @@ if __name__ == '__main__':
         repo = g.get_repo(GITHUB_REPO)
         projects = repo.get_projects()
         project = None
+        iter_count = 0
 
-        board_template_dict, current_card_dict = pull_board_info()
-
-        csv_file_read = open(CSV_FILE_NAME, 'r', newline='')
-        csv_reader = csv.reader(csv_file_read, delimiter=',')
-        last_row = None
-        for row in csv_reader:
-            last_row = row
+        completion_rate, todo_count, completion_date = process_cfd()
+        for label in LABEL_FILTER:
+            var1, var2, var3 = process_cfd(label)
 
         current_date = datetime.datetime.now().strftime("%Y-%m-%d")
 
-        write_board_to_csv(current_date, last_row, current_card_dict)
-        last_row = [current_card_dict[item] for item in current_card_dict]
-        last_row.insert(0, current_date)
-        board_historic_dict = pull_updated_csv_info(current_date, last_row, \
-                                                board_template_dict)
-        arr_group = create_cfd(board_historic_dict)
-        completion_rate, todo_count, completion_date = \
-                todo_completion_forecast(arr_group)
-
         if SEND_EMAIL:
-            push_email_update(current_date)
+            push_email_update(current_date, completion_rate, todo_count, \
+                             completion_date)
+
+
