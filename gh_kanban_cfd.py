@@ -12,19 +12,19 @@ from email import encoders
 
 # please fill in the required information below prior
 # to running the script.
-CSV_FILE_NAME = ''
-PROJECT_NAME = ''
-USERNAME = ''
-PASSWORD = ''
-GITHUB_REPO = ''
-EMAIL_PWD = ''
-fromaddr = ''
-recipients = ['justemail@test.com','anotheremail@test.com']
-SUBJECT = ''
+CSV_FILE_NAME = ''          # the csv file to record and read project board data
+PROJECT_NAME = ''           # the name of the your Github project board
+USERNAME = ''               # your Github username
+PASSWORD = ''               # your Github password
+GITHUB_REPO = ''            # your Github repository
+EMAIL_PWD = ''              # your email password through which email reports will be sent
+fromaddr = ''               # the email through which reports will be sent
+recipients = ['']           # the recipents of the email report
+SUBJECT = ''                # the subject of the email report
 COLUMN_FIND_CRITERIA = ['Date', 'To Do', 'In Progress',
                         'Verify', 'Done']
-LABEL_FILTER = ['Sample']
-SEND_EMAIL = True
+LABEL_FILTER = []           # the list of Github label as strings for separate reports
+SEND_EMAIL = True           # set to False if email sending is not required
 
 
 # todo_completion_forecast returns:
@@ -41,6 +41,15 @@ def todo_completion_forecast(arr_stack):
     projected_completion_date = (current_date + \
             datetime.timedelta(days=project_completion_days)).strftime("%Y-%m-%d")
     return completion_rate, current_todo_count, projected_completion_date
+
+
+def get_issue_from_projectcard(card):
+    split_url = (card.content_url).split('/')
+    issue_num = split_url[len(split_url)-1]
+    issue_url = "https://github.com/" + GITHUB_REPO + "/" + \
+            str(issue_num)
+    issue = repo.get_issue(int(issue_num))
+    return issue
 
 
 # get the current situation on the board and store it in the dict
@@ -60,11 +69,7 @@ def pull_board_info(filter_by_label=None):
                         cards_count = 0
                         if filter_by_label:
                             for card in column_cards:
-                                split_url = (card.content_url).split('/')
-                                issue_num = split_url[len(split_url)-1]
-                                issue_url = "https://github.com/" + GITHUB_REPO + "/" + \
-                                    str(issue_num)
-                                issue = repo.get_issue(int(issue_num))
+                                issue = get_issue_from_projectcard(card)
                                 issue_labels = list(issue.get_labels())
                                 for label in issue_labels:
                                     if filter_by_label.lower() == label.name.lower():
@@ -262,5 +267,4 @@ if __name__ == '__main__':
         if SEND_EMAIL:
             push_email_update(current_date, completion_rate, todo_count, \
                              completion_date)
-
 
